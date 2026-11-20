@@ -42,16 +42,73 @@ class MonitoringAlert:
     judge_fails: int = 0
 
     def check_metrics(self) -> list[Alert]:
-        """TODO: compute rates, append Alert objects when thresholds exceeded."""
-        raise NotImplementedError("Implement MonitoringAlert.check_metrics")
+        """Compute rates; append (and return) new Alerts when thresholds are exceeded."""
+        snap = self.snapshot()
+        candidates = [
+            (
+                "block_rate",
+                snap["block_rate"],
+                self.block_rate_threshold,
+                snap["block_rate"] > self.block_rate_threshold,
+                "Block rate above threshold — possible attack campaign or "
+                "over-aggressive filters (check false positives).",
+            ),
+            (
+                "rate_limit_hits",
+                float(self.rate_limit_hits),
+                float(self.rate_limit_hit_threshold),
+                self.rate_limit_hits >= self.rate_limit_hit_threshold,
+                "Many rate-limit hits — possible flooding / cost attack.",
+            ),
+            (
+                "judge_fail_rate",
+                snap["judge_fail_rate"],
+                self.judge_fail_rate_threshold,
+                snap["judge_fail_rate"] > self.judge_fail_rate_threshold,
+                "LLM judge rejects many responses — model may be leaking or "
+                "hallucinating.",
+            ),
+        ]
+        fired = {a.metric for a in self.alerts}
+        new_alerts = []
+        for metric, value, threshold, exceeded, message in candidates:
+            if exceeded and metric not in fired:
+                alert = Alert(
+                    metric=metric,
+                    value=round(value, 4),
+                    threshold=threshold,
+                    message=message,
+                )
+                self.alerts.append(alert)
+                new_alerts.append(alert)
+                print(f"[ALERT] {metric}={value:.2f} (threshold {threshold}) — {message}")
+        return new_alerts
+
+    def record(self, *, blocked: bool, rate_limited: bool = False,
+               judge_checked: bool = False, judge_failed: bool = False):
+        """Update counters after one request."""
+        self.total_requests += 1
+        if blocked:
+            self.blocked_requests += 1
+        if rate_limited:
+            self.rate_limit_hits += 1
+        if judge_checked:
+            self.judge_checks += 1
+            if judge_failed:
+                self.judge_fails += 1
 
     def export_json(self, filepath: str | None = None):
-        """TODO: write metrics + alerts to JSON under repo-root ``outputs/`` by default.
-        Use ``filepath or default_metrics_path()`` so running from ``src/`` does not
-        create ``src/outputs/``.
-        """
-        _ = filepath or default_metrics_path()
-        raise NotImplementedError("Implement MonitoringAlert.export_json")
+        """Write metrics + alerts to JSON under repo-root ``outputs/`` by default."""
+        path = Path(filepath or default_metrics_path())
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = self.snapshot()
+        data["thresholds"] = {
+            "block_rate": self.block_rate_threshold,
+            "rate_limit_hits": self.rate_limit_hit_threshold,
+            "judge_fail_rate": self.judge_fail_rate_threshold,
+        }
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        return str(path)
 
     def snapshot(self) -> dict:
         block_rate = (

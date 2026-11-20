@@ -1,0 +1,22 @@
+{
+  "total_requests": 27,
+  "blocked_requests": 16,
+  "block_rate": 0.5925925925925926,
+  "rate_limit_hits": 3,
+  "judge_checks": 0,
+  "judge_fails": 0,
+  "judge_fail_rate": 0.0,
+  "alerts": [
+    {
+      "metric": "block_rate",
+      "value": 0.5926,
+      "threshold": 0.5,
+      "message": "Block rate above threshold — possible attack campaign or over-aggressive filters (check false positives)."
+    }
+  ],
+  "thresholds": {
+    "block_rate": 0.5,
+    "rate_limit_hits": 5,
+    "judge_fail_rate": 0.3
+  }
+}
